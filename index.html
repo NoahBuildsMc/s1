@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0b2930">
+<title>Epic Island – 3D-Prototyp</title>
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#071e25;font-family:system-ui,-apple-system,Segoe UI,sans-serif;touch-action:none}
+#renderCanvas{width:100%;height:100%;display:block;outline:none;touch-action:none}
+#vignette{position:fixed;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(2,19,24,.45),transparent 25%,transparent 65%,rgba(2,16,19,.48))}
+#top{position:fixed;top:max(12px,env(safe-area-inset-top));left:14px;right:14px;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;pointer-events:none}
+.panel{background:rgba(6,27,31,.72);border:1px solid rgba(220,242,226,.18);backdrop-filter:blur(12px);border-radius:14px;padding:10px 13px;box-shadow:0 8px 26px #00111455}
+.brand{font-weight:800;letter-spacing:.16em;font-size:12px;color:#d8f0d9}.sub{font-size:10px;color:#b2c7bd;margin-top:3px;letter-spacing:.08em}
+.stats{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}.stat{font-size:12px;color:#eff7e9;white-space:nowrap}.stat b{color:#f6d48b}
+#mission{position:fixed;top:88px;left:14px;max-width:250px;color:#e8f4e9;font-size:12px;line-height:1.45}
+#mission strong{display:block;color:#f4d38a;font-size:10px;letter-spacing:.13em;margin-bottom:4px}
+#bottom{position:fixed;left:14px;right:14px;bottom:max(14px,env(safe-area-inset-bottom));display:flex;justify-content:space-between;align-items:end;pointer-events:none}
+#hint{max-width:270px;font-size:11px;color:#d3e2d6;line-height:1.4}
+.actions{display:flex;gap:8px;pointer-events:auto;align-items:end}
+button{border:1px solid rgba(238,247,226,.25);background:rgba(7,34,37,.78);color:#f3f4e6;border-radius:13px;padding:12px 14px;font-weight:700;font-size:12px;backdrop-filter:blur(10px);min-height:44px}
+button.primary{background:#c58c42;color:#17251d;border-color:#f1d29a}
+#joystick{position:fixed;left:25px;bottom:34px;width:116px;height:116px;border-radius:50%;border:1px solid #e4f2df55;background:#dcefe51a;display:none;pointer-events:auto;touch-action:none}
+#stick{position:absolute;width:48px;height:48px;border-radius:50%;background:#d9e9d5aa;border:1px solid #fff8;left:34px;top:34px}
+#toast{position:fixed;left:50%;top:48%;transform:translate(-50%,-50%);padding:12px 18px;border-radius:12px;background:#102f2aee;border:1px solid #e1e9c966;color:#fff2d6;font-weight:700;font-size:13px;opacity:0;transition:opacity .25s;pointer-events:none;text-align:center;max-width:85vw}
+#modal{position:fixed;inset:0;background:#061b20bb;display:none;align-items:center;justify-content:center;padding:20px}
+#modal .panel{max-width:360px;width:100%;color:#e9f1e6;line-height:1.5}
+#modal h2{margin:0 0 8px;color:#f3d18d;font-size:18px}
+#modal p{font-size:13px;color:#c8d9cc}
+#loading{position:fixed;inset:0;display:grid;place-items:center;background:linear-gradient(145deg,#0c3336,#071c24);color:#eaf3e5;z-index:10;text-align:center}
+#loading .big{font-size:23px;font-weight:850;letter-spacing:.18em}#loading small{display:block;margin-top:10px;color:#b8cec0}
+@media(pointer:coarse){#joystick{display:block}#bottom{left:150px}#hint{max-width:180px}.actions{gap:5px}button{padding:10px 11px;font-size:11px}}
+@media(max-width:650px){#mission{top:82px;max-width:190px;font-size:10px}.stats{gap:4px}.stat{font-size:10px}.brand{font-size:10px}.sub{font-size:9px}#bottom{left:150px}#hint{display:none}.actions button{min-height:40px}}
+</style>
+</head>
+<body>
+<canvas id="renderCanvas"></canvas><div id="vignette"></div>
+<div id="loading"><div><div class="big">EPIC ISLAND</div><small>Die Insel wird vorbereitet …</small></div></div>
+<div id="top">
+ <div class="panel"><div class="brand">EPIC ISLAND</div><div class="sub">RESTORE THE PARADISE</div></div>
+ <div class="panel stats"><span class="stat">◈ <b id="coins">0</b> Coins</span><span class="stat">♻ <b id="plastic">0</b> Plastik</span><span class="stat">✦ Level <b id="level">1</b></span></div>
+</div>
+<div id="mission" class="panel"><strong>AKTUELLES ZIEL</strong><span id="goal">Sammle angeschwemmten Müll am Startstrand.</span></div>
+<div id="bottom"><div id="hint">Bewege dich mit WASD oder dem linken Steuerkreis. Gehe nahe an Müll und drücke „Sammeln“.</div><div class="actions"><button id="camera">3. PERSON</button><button id="interact" class="primary">SAMMELN</button><button id="build">SHELTER</button></div></div>
+<div id="joystick"><div id="stick"></div></div><div id="toast"></div>
+<div id="modal"><div class="panel"><h2>Insel-Inventar</h2><p id="inventoryText">Du hast noch nichts gesammelt.</p><button id="closeModal">Schließen</button></div></div>
+<script src="https://cdn.babylonjs.com/babylon.js"></script>
+<script>
+(()=> {
+const canvas=document.getElementById('renderCanvas');
+if(!window.BABYLON){document.getElementById('loading').innerHTML='<div>3D-Engine konnte nicht geladen werden.<br><small>Bitte Internetverbindung prüfen und Seite neu laden.</small></div>';return;}
+const engine=new BABYLON.Engine(canvas,true,{preserveDrawingBuffer:false,stencil:true,antialias:true},true);
+engine.setHardwareScalingLevel(Math.min(1.35,window.devicePixelRatio>2?1.5:1));
+const scene=new BABYLON.Scene(engine);scene.clearColor=new BABYLON.Color4(.54,.77,.82,1);
+scene.fogMode=BABYLON.Scene.FOGMODE_EXP2;scene.fogDensity=.006;scene.fogColor=new BABYLON.Color3(.55,.75,.77);
+const camera=new BABYLON.ArcRotateCamera('camera',-Math.PI/2,1.05,12,new BABYLON.Vector3(0,1,0),scene);
+camera.lowerRadiusLimit=5;camera.upperRadiusLimit=20;camera.lowerBetaLimit=.35;camera.upperBetaLimit=1.42;camera.wheelPrecision=45;camera.attachControl(canvas,true);
+const hemi=new BABYLON.HemisphericLight('sky',new BABYLON.Vector3(0,1,0),scene);hemi.intensity=.78;hemi.groundColor=new BABYLON.Color3(.25,.28,.2);
+const sun=new BABYLON.DirectionalLight('sun',new BABYLON.Vector3(-.45,-1,.28),scene);sun.position=new BABYLON.Vector3(35,50,-25);sun.intensity=1.15;
+const shadows=new BABYLON.ShadowGenerator(1024,sun);shadows.useBlurExponentialShadowMap=true;shadows.blurKernel=16;
+const mat=(name,color,rough=.8)=>{let m=new BABYLON.StandardMaterial(name,scene);m.diffuseColor=BABYLON.Color3.FromHexString(color);m.specularColor=new BABYLON.Color3(.12,.12,.12);m.roughness=rough;return m;};
+const sand=mat('warm sand','#d7bd88'),sand2=mat('wet sand','#a99469'),grass=mat('island green','#547b4d'),leaf=mat('palm leaf','#326747'),leaf2=mat('sunlit leaf','#6e9656'),wood=mat('weathered wood','#8b6844'),bark=mat('palm bark','#795438'),rock=mat('rock','#77796d'),plastic=mat('plastic','#d5e5df'),blue=mat('bottle','#579eae'),metal=mat('metal','#a9aaa0'),turtleMat=mat('turtle shell','#527a4c'),dark=mat('shadow','#25342d');
+function receive(mesh){mesh.receiveShadows=true;return mesh}
+function islandHeight(x,z){let d=Math.sqrt((x/27)**2+(z/22)**2);return Math.max(-.2,1.8-d*2.1)+.13*Math.sin(x*.34)*Math.cos(z*.3);}
+const ground=BABYLON.MeshBuilder.CreateGround('island terrain',{width:62,height:52,subdivisions:70},scene);
+const pos=ground.getVerticesData(BABYLON.VertexBuffer.PositionKind);for(let i=0;i<pos.length;i+=3){let x=pos[i],z=pos[i+2];pos[i+1]=islandHeight(x,z);}
+ground.updateVerticesData(BABYLON.VertexBuffer.PositionKind,pos);ground.createNormals(true);ground.material=grass;receive(ground);
+const beach=BABYLON.MeshBuilder.CreateGround('beach',{width:58,height:48,subdivisions:70},scene);
+const bp=beach.getVerticesData(BABYLON.VertexBuffer.PositionKind);for(let i=0;i<bp.length;i+=3){let x=bp[i],z=bp[i+2];bp[i+1]=islandHeight(x,z)+.025;}
+beach.updateVerticesData(BABYLON.VertexBuffer.PositionKind,bp);beach.createNormals(true);beach.material=sand;beach.isVisible=false;
+const water=BABYLON.MeshBuilder.CreateGround('lagoon ocean',{width:220,height:190,subdivisions:2},scene);water.position.y=-.28;const waterMat=new BABYLON.StandardMaterial('ocean material',scene);waterMat.diffuseColor=new BABYLON.Color3(.10,.48,.55);waterMat.specularColor=new BABYLON.Color3(.65,.82,.82);waterMat.alpha=.88;water.material=waterMat;
+const shore=BABYLON.MeshBuilder.CreateGround('shore sand',{width:54,height:44,subdivisions:48},scene);shore.position.y=.02;shore.material=sand;shore.isVisible=false;
+// sandy crescent overlay around center clearing
+function makePalm(x,z,scale=1){let y=islandHeight(x,z);let trunk=BABYLON.MeshBuilder.CreateCylinder('palm trunk',{height:5.2*scale,diameterTop:.22*scale,diameterBottom:.48*scale,tessellation:9},scene);trunk.position.set(x,y+2.5*scale,z);trunk.rotation.z=.08;trunk.material=bark;shadows.addShadowCaster(trunk);
+for(let k=0;k<8;k++){let a=k*Math.PI/4;let leafMesh=BABYLON.MeshBuilder.CreateCylinder('palm frond',{height:3.8*scale,diameterTop:.025*scale,diameterBottom:.18*scale,tessellation:5},scene);leafMesh.position.set(x+Math.cos(a)*1.25*scale,y+4.7*scale,z+Math.sin(a)*1.25*scale);leafMesh.rotation.z=-.62;leafMesh.rotation.y=-a;leafMesh.material=k%3===0?leaf2:leaf;shadows.addShadowCaster(leafMesh);}
+}
+function makeTree(x,z,s=1){let y=islandHeight(x,z);let t=BABYLON.MeshBuilder.CreateCylinder('tropical tree',{height:2.7*s,diameterTop:.18*s,diameterBottom:.38*s},scene);t.position.set(x,y+1.3*s,z);t.material=bark;let crown=BABYLON.MeshBuilder.CreateSphere('canopy',{diameter:3.4*s,segments:7},scene);crown.position.set(x,y+3.1*s,z);crown.scaling.y=.72;crown.material=leaf;shadows.addShadowCaster(t);shadows.addShadowCaster(crown);}
+for(let i=0;i<32;i++){let a=i*2.399,r=10+(i%7)*1.55,x=Math.cos(a)*r,z=Math.sin(a)*r*.82;if(Math.abs(x)<7&&z>0&&z<11)continue;if(i%3===0)makePalm(x,z,.72+(i%4)*.1);else makeTree(x,z,.72+(i%4)*.13);}
+for(let i=0;i<24;i++){let x=(Math.random()-.5)*46,z=(Math.random()-.5)*38;if(Math.sqrt((x/27)**2+(z/22)**2)<.72)continue;let b=BABYLON.MeshBuilder.CreateSphere('coastal boulder',{diameter:1.2+Math.random()*1.8,segments:6},scene);b.position.set(x,islandHeight(x,z)+.35,z);b.scaling.y=.65;b.material=rock;shadows.addShadowCaster(b);}
+const player=BABYLON.MeshBuilder.CreateCapsule('island explorer',{height:1.8,radius:.34},scene);player.position.set(0,islandHeight(0,0)+.92,6);player.material=mat('shirt','#d6a66d');shadows.addShadowCaster(player);
+const head=BABYLON.MeshBuilder.CreateSphere('head',{diameter:.48,segments:12},scene);head.parent=player;head.position.y=.78;head.material=mat('skin','#c98f68');
+const backpack=BABYLON.MeshBuilder.CreateBox('backpack',{width:.5,height:.65,depth:.22},scene);backpack.parent=player;backpack.position.set(0,.05,.34);backpack.material=mat('pack','#586f55');
+const debris=[];let collected=0,coins=0,plasticCount=0,level=1,shelter=false,turtleSaved=false,firstPerson=false;
+function addDebris(x,z,type){let y=islandHeight(x,z)+.16;let m;if(type==='bottle'){m=BABYLON.MeshBuilder.CreateCylinder('plastic bottle',{height:.55,diameter:.19,tessellation:9},scene);m.rotation.z=.18;m.material=blue;}else if(type==='can'){m=BABYLON.MeshBuilder.CreateCylinder('metal can',{height:.32,diameter:.25,tessellation:12},scene);m.material=metal;}else{m=BABYLON.MeshBuilder.CreateBox('washed up packaging',{width:.55,height:.16,depth:.38},scene);m.rotation.y=Math.random()*3;m.material=plastic;}m.position.set(x,y,z);m.metadata={type};shadows.addShadowCaster(m);debris.push(m);}
+[[-5,8,'bottle'],[-2,10,'bag'],[3,8,'can'],[6,10,'bottle'],[-7,4,'bag'],[8,5,'can'],[-9,9,'bottle'],[1,13,'bag'],[10,12,'can'],[-3,15,'bottle'],[5,16,'bag'],[-11,2,'can']].forEach(v=>addDebris(...v));
+function buildShelter(){let x=0,z=-2,y=islandHeight(x,z);let floor=BABYLON.MeshBuilder.CreateBox('shelter deck',{width:4.5,height:.22,depth:3.5},scene);floor.position.set(x,y+.15,z);floor.material=wood;let roof=BABYLON.MeshBuilder.CreateBox('shelter roof',{width:4.9,height:.22,depth:3.9},scene);roof.position.set(x,y+2.6,z);roof.rotation.z=.08;roof.material=wood;for(let dx of [-2,2])for(let dz of [-1.4,1.4]){let p=BABYLON.MeshBuilder.CreateCylinder('shelter post',{height:2.5,diameter:.16},scene);p.position.set(x+dx,y+1.35,z+dz);p.material=bark;}shelter=true;toast('Dein erstes Shelter steht!');document.getElementById('goal').textContent='Sammle Müll und stelle die Insel wieder her.';}
+function toast(t){let el=document.getElementById('toast');el.textContent=t;el.style.opacity=1;clearTimeout(toast.t);toast.t=setTimeout(()=>el.style.opacity=0,1900);}
+function updateHud(){document.getElementById('coins').textContent=coins;document.getElementById('plastic').textContent=plasticCount;document.getElementById('level').textContent=level;}
+function nearest(){let best=null,dist=2.6;for(let d of debris){if(d.isDisposed())continue;let q=BABYLON.Vector3.Distance(player.position,d.position);if(q<dist){dist=q;best=d;}}return best;}
+function interact(){let d=nearest();if(d){d.dispose();collected++;coins+=5;plasticCount+=d.metadata.type==='can'?0:1;if(collected%4===0)level++;updateHud();toast('Aufgesammelt  +5 Coins');if(collected>=5&&!turtleSaved){document.getElementById('goal').textContent='Eine Schildkröte steckt nahe der Lagune in einem alten Netz. Gehe zur Lagune und rette sie.';}else if(collected>=9){document.getElementById('goal').textContent='Der Strand wird sauberer. Baue dein Shelter und erkunde die Insel.';}return;}
+if(!shelter&&coins>=20){buildShelter();coins-=20;updateHud();return;}
+if(collected>=5&&!turtleSaved&&BABYLON.Vector3.Distance(player.position,new BABYLON.Vector3(12,islandHeight(12,-7)+.5,-7))<8){turtleSaved=true;toast('Schildkröte gerettet – die Lagune lebt auf!');document.getElementById('goal').textContent='Erkunde die Insel und sammle weitere Fundstücke.';makeTurtle(12,-7);return;}
+toast(shelter?'Nichts in unmittelbarer Nähe.':'Sammle Müll. Mit 20 Coins kannst du ein Shelter bauen.');}
+function makeTurtle(x,z){let y=islandHeight(x,z)+.22;let body=BABYLON.MeshBuilder.CreateSphere('rescued sea turtle',{diameter:1.0,segments:10},scene);body.position.set(x,y,z);body.scaling.set(1,.45,1.25);body.material=turtleMat;let shell=BABYLON.MeshBuilder.CreateSphere('turtle shell',{diameter:.85,segments:10},scene);shell.position.set(x,y+.18,z);shell.scaling.set(1,.5,1.15);shell.material=mat('shell','#315b3c');}
+document.getElementById('interact').onclick=interact;
+document.getElementById('build').onclick=()=>{if(shelter){toast('Shelter ist bereits gebaut.');return;}if(coins<20){toast('Dir fehlen noch Coins. Sammle Müll am Strand.');return;}buildShelter();coins-=20;updateHud();};
+document.getElementById('camera').onclick=()=>{firstPerson=!firstPerson;document.getElementById('camera').textContent=firstPerson?'1. PERSON':'3. PERSON';camera.radius=firstPerson?.15:12;camera.beta=firstPerson?Math.PI/2:1.05;camera.lowerRadiusLimit=firstPerson?.15:5;camera.upperRadiusLimit=firstPerson?.15:20;camera.target=player.position.add(new BABYLON.Vector3(0,firstPerson?1.55:1,0));toast(firstPerson?'First-Person-Ansicht':'Third-Person-Ansicht');};
+document.getElementById('closeModal').onclick=()=>document.getElementById('modal').style.display='none';
+window.addEventListener('keydown',e=>{keys[e.key.toLowerCase()]=true;if(e.key.toLowerCase()==='e')interact();if(e.key.toLowerCase()==='i'){document.getElementById('inventoryText').textContent=`Gesammelt: ${collected} · Coins: ${coins} · Recycling-Plastik: ${plasticCount}`;document.getElementById('modal').style.display='flex';}});
+window.addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
+let keys={},joy={x:0,y:0},drag=false;const joyEl=document.getElementById('joystick'),stick=document.getElementById('stick');
+joyEl.addEventListener('pointerdown',e=>{drag=true;joyEl.setPointerCapture(e.pointerId);moveJoy(e);});joyEl.addEventListener('pointermove',e=>{if(drag)moveJoy(e);});['pointerup','pointercancel'].forEach(ev=>joyEl.addEventListener(ev,()=>{drag=false;joy={x:0,y:0};stick.style.transform='translate(0,0)';}));
+function moveJoy(e){let r=joyEl.getBoundingClientRect(),x=e.clientX-(r.left+r.width/2),y=e.clientY-(r.top+r.height/2),l=Math.hypot(x,y),max=37;if(l>max){x=x/l*max;y=y/l*max;}joy={x:x/max,y:y/max};stick.style.transform=`translate(${x}px,${y}px)`;}
+let last=performance.now();engine.runRenderLoop(()=>{let now=performance.now(),dt=Math.min((now-last)/1000,.04);last=now;
+let forward=(keys.w||keys.arrowup?1:0)-(keys.s||keys.arrowdown?1:0)-joy.y;let side=(keys.d||keys.arrowright?1:0)-(keys.a||keys.arrowleft?1:0)+joy.x;
+let move=new BABYLON.Vector3(side,0,forward);if(move.length()>.05){move.normalize();let angle=Math.atan2(move.x,move.z);player.rotation.y=angle;player.position.x+=move.x*4.2*dt;player.position.z+=move.z*4.2*dt;player.position.x=BABYLON.Scalar.Clamp(player.position.x,-23,23);player.position.z=BABYLON.Scalar.Clamp(player.position.z,-19,19);player.position.y=islandHeight(player.position.x,player.position.z)+.92;camera.target=player.position.add(new BABYLON.Vector3(0,firstPerson?1.5:1,0));}
+if(!firstPerson){camera.alpha+=(Math.atan2(player.position.x-camera.target.x,player.position.z-camera.target.z)-camera.alpha)*0.0;}
+water.position.y=-.28+Math.sin(now*.0005)*.025;scene.render();});
+window.addEventListener('resize',()=>engine.resize());
+scene.executeWhenReady(()=>{document.getElementById('loading').style.display='none';toast('Willkommen auf Epic Island');});
+updateHud();
+})();
+</script>
+</body></html>
